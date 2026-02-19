@@ -1,59 +1,58 @@
 import os
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 TOKEN = os.environ.get("TOKEN")
 
 waiting_users = []
 active_chats = {}
 
-def start(update, context):
-    update.message.reply_text("Send /find to search for a stranger")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Send /find to search for a stranger")
 
-def find(update, context):
-    user_id = update.message.chat_id
+async def find(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
 
     if user_id in active_chats:
-        update.message.reply_text("You are already in a chat")
+        await update.message.reply_text("You are already in a chat")
         return
 
     if waiting_users:
         partner = waiting_users.pop(0)
         active_chats[user_id] = partner
         active_chats[partner] = user_id
-        context.bot.send_message(user_id, "Connected to stranger 👀")
-        context.bot.send_message(partner, "Connected to stranger 👀")
+        await context.bot.send_message(user_id, "Connected to stranger 👀")
+        await context.bot.send_message(partner, "Connected to stranger 👀")
     else:
         waiting_users.append(user_id)
-        update.message.reply_text("Waiting for partner...")
+        await update.message.reply_text("Waiting for partner...")
 
-def leave(update, context):
-    user_id = update.message.chat_id
+async def leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
 
     if user_id in active_chats:
         partner = active_chats.pop(user_id)
         active_chats.pop(partner, None)
-        context.bot.send_message(partner, "Stranger left the chat")
-        update.message.reply_text("You left the chat")
+        await context.bot.send_message(partner, "Stranger left the chat")
+        await update.message.reply_text("You left the chat")
     else:
-        update.message.reply_text("You are not in a chat")
+        await update.message.reply_text("You are not in a chat")
 
-def relay(update, context):
-    user_id = update.message.chat_id
+async def relay(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
     text = update.message.text
 
     if user_id in active_chats:
         partner = active_chats[user_id]
-        context.bot.send_message(partner, text)
+        await context.bot.send_message(partner, text)
     else:
-        update.message.reply_text("Use /find to start chatting")
+        await update.message.reply_text("Use /find to start chatting")
 
-updater = Updater(TOKEN, use_context=True)
-dp = updater.dispatcher
+app = ApplicationBuilder().token(TOKEN).build()
 
-dp.add_handler(CommandHandler("start", start))
-dp.add_handler(CommandHandler("find", find))
-dp.add_handler(CommandHandler("leave", leave))
-dp.add_handler(MessageHandler(Filters.text & ~Filters.command, relay))
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("find", find))
+app.add_handler(CommandHandler("leave", leave))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, relay))
 
-updater.start_polling()
-updater.idle()
+app.run_polling()
