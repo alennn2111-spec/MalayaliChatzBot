@@ -1,9 +1,10 @@
 import os
-import asyncio
+from aiohttp import web
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 TOKEN = os.environ.get("TOKEN")
+WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL") + "/webhook"
 
 waiting_users = []
 active_chats = {}
@@ -49,7 +50,14 @@ async def relay(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Use /find to start chatting")
 
+async def handle(request):
+    data = await request.json()
+    update = Update.de_json(data, app.bot)
+    await app.process_update(update)
+    return web.Response()
+
 async def main():
+    global app
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -58,9 +66,18 @@ async def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, relay))
 
     await app.initialize()
+    await app.bot.set_webhook(WEBHOOK_URL)
+
+    web_app = web.Application()
+    web_app.router.add_post("/webhook", handle)
+
+    runner = web.AppRunner(web_app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", int(os.environ.get("PORT", 10000)))
+    await site.start()
+
     await app.start()
-    await app.updater.start_polling()
     await app.stop()
 
-if __name__ == "__main__":
-    asyncio.run(main())
+import asyncio
+asyncio.run(main())
