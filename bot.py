@@ -1,4 +1,5 @@
 import os
+import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
@@ -48,11 +49,18 @@ async def relay(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Use /find to start chatting")
 
-app = ApplicationBuilder().token(TOKEN).build()
+async def main():
+    app = ApplicationBuilder().token(TOKEN).build()
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("find", find))
-app.add_handler(CommandHandler("leave", leave))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, relay))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("find", find))
+    app.add_handler(CommandHandler("leave", leave))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, relay))
 
-app.run_polling()
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    await app.stop()
+
+if __name__ == "__main__":
+    asyncio.run(main())
