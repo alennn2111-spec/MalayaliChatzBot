@@ -1,4 +1,3 @@
-
 # bot.py
 import asyncio
 import logging
@@ -135,3 +134,4 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
+
