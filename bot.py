@@ -120,4 +120,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(lifespan=lifespan)
 
 @app.post(WEBHOOK_PATH)
-async def webhook(req
+async def webhook(request: Request):
+    json_data = await request.json()
+    update = Update.de_json(json_data, application.bot)
+    await application.process_update(update)
+    return {"ok": True}
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(
+        "bot:app",
+        host="0.0.0.0",
+        port=port,
+        log_level="info"
+    )
+
