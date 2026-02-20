@@ -2,11 +2,11 @@
 import asyncio
 import logging
 import os
-from typing import Dict
+from typing import Dict, AsyncGenerator
 
 import uvicorn
-from fastapi import FastAPI, Request, HTTPException
-from starlette.responses import Response
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
 
 from telegram import Update
 from telegram.ext import (
@@ -21,8 +21,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TOKEN = os.environ["TOKEN"]
-PORT = int(os.environ.get("PORT", 8000))
-WEBHOOK_URL = os.environ["RENDER_EXTERNAL_URL"]
+WEBHOOK_PATH = "/webhook"
+
+application: Application = None
 
 # Global state for pairs: {user_id: partner_id}
 pairs: Dict[int, int] = {}
@@ -45,7 +46,7 @@ async def find(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     waiting_users.append(user_id)
     await update.message.reply_text("Searching for partner...")
     
-    await asyncio.sleep(1)  # Simulate search
+    await asyncio.sleep(1)
     
     if len(waiting_users) >= 2:
         partner1 = waiting_users.pop(0)
@@ -90,48 +91,33 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         text=f"👤 Stranger: {message_text}"
     )
 
-async def webhook_endpoint(request: Request, application: Application) -> Response:
-    json_data = await request.json()
-    update = Update.de_json(json_data, application.bot)
-    await application.process_update(update)
-    return Response()
-
-async def main() -> None:
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    global application
     application = (
         Application.builder()
         .token(TOKEN)
-        .updater(None)
         .build()
     )
     
-    # Handlers
+    # Add handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("find", find))
     application.add_handler(CommandHandler("leave", leave))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
     
     # Set webhook
-    webhook_path = "/webhook"
-    await application.bot.set_webhook(f"{WEBHOOK_URL.rstrip('/')}{webhook_path}")
+    webhook_url = f"{os.environ['RENDER_EXTERNAL_URL'].rstrip('/')}{WEBHOOK_PATH}"
+    await application.bot.set_webhook(webhook_url)
+    logger.info(f"Webhook set to {webhook_url}")
     
-    # FastAPI app
-    app = FastAPI()
-    app.post(webhook_path)(lambda request: webhook_endpoint(request, application))
-    
-    # Uvicorn config
-    config = uvicorn.Config(
-        app,
-        host="0.0.0.0",
-        port=PORT,
-        log_level="info"
-    )
-    server = uvicorn.Server(config)
-    
-    async with application:
-        await application.start()
-        await server.serve()
-        await application.stop()
+    await application.initialize()
+    await application.start()
+    yield
+    await application.stop()
+    await application.shutdown()
 
-if __name__ == "__main__":
-    asyncio.run(main())
+app = FastAPI(lifespan=lifespan)
 
+@app.post(WEBHOOK_PATH)
+async def webhook(req
