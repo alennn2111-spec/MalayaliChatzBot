@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: anonchatbot
-    runtime: python
-    buildCommand: ""
-    startCommand: python bot.py
-    envVars:
-      - key: TOKEN
-        sync: false
